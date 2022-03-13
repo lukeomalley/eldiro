@@ -1,13 +1,9 @@
 pub(crate) fn extract_digits(s: &str) -> (&str, &str) {
-	let digits_end = s
-		.char_indices()
-		.find_map(|(idx, c)| if c.is_ascii_digit() { None } else { Some(idx) })
-		.unwrap_or_else(|| s.len());
+	take_while(|c| c.is_ascii_digit(), s)
+}
 
-	let digits = &s[..digits_end];
-	let remainder = &s[digits_end..];
-
-	(remainder, digits)
+pub(crate) fn extract_whitespace(s: &str) -> (&str, &str) {
+	take_while(|c| c == ' ', s)
 }
 
 pub(crate) fn extract_op(s: &str) -> (&str, &str) {
@@ -17,6 +13,18 @@ pub(crate) fn extract_op(s: &str) -> (&str, &str) {
 	}
 
 	(&s[1..], &s[0..1])
+}
+
+pub(crate) fn take_while(accept: impl Fn(char) -> bool, s: &str) -> (&str, &str) {
+	let extracted_end = s
+		.char_indices()
+		.find_map(|(idx, c)| if accept(c) { None } else { Some(idx) })
+		.unwrap_or_else(|| s.len());
+
+	let extracted = &s[..extracted_end];
+	let remainder = &s[extracted_end..];
+
+	(remainder, extracted)
 }
 
 #[cfg(test)]
@@ -61,5 +69,10 @@ mod tests {
 	#[test]
 	fn extract_div() {
 		assert_eq!(extract_op("/100"), ("100", "/"));
+	}
+
+	#[test]
+	fn extract_spaces() {
+		assert_eq!(extract_whitespace("      100"), ("100", "      "));
 	}
 }
