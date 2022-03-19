@@ -4,4 +4,4 @@
 
 ## Progress
 
-[Part 5](https://arzg.github.io/lang/5/)
+[Part 6 - Blocks](https://arzg.github.io/lang/6/)
