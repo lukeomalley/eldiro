@@ -1,5 +1,11 @@
+pub mod binding_usage;
+pub mod block;
+
+use crate::env::Env;
 use crate::utils;
 use crate::val::Val;
+use binding_usage::BindingUsage;
+use block::Block;
 
 #[derive(Debug, PartialEq)]
 pub struct Number(pub i32);
@@ -33,11 +39,18 @@ impl Op {
 pub enum Expr {
 	Number(Number),
 	Operation { lhs: Number, rhs: Number, op: Op },
+	BindingUsage(BindingUsage),
+	Block(Block),
 }
 
 impl Expr {
 	pub fn new(s: &str) -> Result<(&str, Self), String> {
-		Self::new_operation(s).or_else(|_| Self::new_number(s))
+		Self::new_operation(s)
+			.or_else(|_| Self::new_number(s))
+			.or_else(|_| {
+				BindingUsage::new(s).map(|(s, binding_usage)| (s, Self::BindingUsage(binding_usage)))
+			})
+			.or_else(|_| Block::new(s).map(|(s, block)| (s, Self::Block(block))))
 	}
 
 	fn new_operation(s: &str) -> Result<(&str, Self), String> {
@@ -56,9 +69,9 @@ impl Expr {
 		Number::new(s).map(|(s, number)| (s, Self::Number(number)))
 	}
 
-	pub(crate) fn eval(&self) -> Val {
+	pub(crate) fn eval(&self, env: &Env) -> Result<Val, String> {
 		match self {
-			Self::Number(Number(n)) => Val::Number(*n),
+			Self::Number(Number(n)) => Ok(Val::Number(*n)),
 			Self::Operation { lhs, rhs, op } => {
 				let Number(lhs) = lhs;
 				let Number(rhs) = rhs;
@@ -70,8 +83,10 @@ impl Expr {
 					Op::Div => lhs / rhs,
 				};
 
-				Val::Number(result)
+				Ok(Val::Number(result))
 			}
+			Self::BindingUsage(binding_usage) => binding_usage.eval(env),
+			Self::Block(block) => block.eval(env),
 		}
 	}
 }
@@ -79,6 +94,7 @@ impl Expr {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::stmt::Stmt;
 
 	#[test]
 	fn parse_number() {
@@ -133,8 +149,8 @@ mod tests {
 				op: Op::Add,
 				rhs: Number(20),
 			}
-			.eval(),
-			Val::Number(30)
+			.eval(&Env::default()),
+			Ok(Val::Number(30))
 		)
 	}
 
@@ -146,8 +162,8 @@ mod tests {
 				op: Op::Sub,
 				rhs: Number(20),
 			}
-			.eval(),
-			Val::Number(-10)
+			.eval(&Env::default()),
+			Ok(Val::Number(-10))
 		)
 	}
 
@@ -159,8 +175,8 @@ mod tests {
 				op: Op::Mul,
 				rhs: Number(20),
 			}
-			.eval(),
-			Val::Number(200)
+			.eval(&Env::default()),
+			Ok(Val::Number(200))
 		)
 	}
 
@@ -172,8 +188,59 @@ mod tests {
 				op: Op::Div,
 				rhs: Number(1),
 			}
-			.eval(),
-			Val::Number(2)
+			.eval(&Env::default()),
+			Ok(Val::Number(2))
+		)
+	}
+
+	#[test]
+	fn parse_binding_usage() {
+		assert_eq!(
+			Expr::new("bar"),
+			Ok((
+				"",
+				Expr::BindingUsage(BindingUsage {
+					name: "bar".to_string(),
+				})
+			))
+		)
+	}
+
+	#[test]
+	fn parse_block() {
+		assert_eq!(
+			Expr::new("{ 200 }"),
+			Ok((
+				"",
+				Expr::Block(Block {
+					stmts: vec![Stmt::Expr(Expr::Number(Number(200)))],
+				})
+			))
+		)
+	}
+
+	#[test]
+	fn eval_binding_usage() {
+		let mut env = Env::default();
+		env.store_binding("ten".to_string(), Val::Number(10));
+
+		assert_eq!(
+			Expr::BindingUsage(BindingUsage {
+				name: "ten".to_string(),
+			})
+			.eval(&env),
+			Ok(Val::Number(10))
+		)
+	}
+
+	#[test]
+	fn eval_block() {
+		assert_eq!(
+			Expr::Block(Block {
+				stmts: vec![Stmt::Expr(Expr::Number(Number(10)))],
+			})
+			.eval(&Env::default()),
+			Ok(Val::Number(10))
 		)
 	}
 }
